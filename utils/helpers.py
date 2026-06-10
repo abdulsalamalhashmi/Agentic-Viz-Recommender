@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,13 @@ from dotenv import load_dotenv
 from google import genai
 
 DEFAULT_MODEL = "gemini-2.5-flash"
+
+# If the default model is overloaded, fall back to these in order.
+_FALLBACK_MODELS = ("gemini-2.0-flash", "gemini-flash-latest")
+
+# Transient server-side errors worth retrying with backoff.
+_RETRYABLE_MARKERS = ("503", "unavailable", "429", "resource_exhausted", "overloaded", "high demand")
+_MAX_ATTEMPTS = 4
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -35,17 +43,54 @@ def get_gemini_client() -> genai.Client:
     return _client
 
 
-def generate_text(prompt: str, model_name: str = DEFAULT_MODEL) -> str:
-    """Send a single-turn prompt to Gemini and return the response text."""
+def _is_retryable(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return any(marker in text for marker in _RETRYABLE_MARKERS)
+
+
+def _generate_once(model_name: str, prompt: str) -> str:
+    """Call one model with exponential-backoff retries on transient errors."""
     global _client
     client = get_gemini_client()
-    try:
-        response = client.models.generate_content(model=model_name, contents=prompt)
-    except Exception:
-        # Drop the cached client so a fixed key / transient failure can recover without restart.
-        _client = None
-        raise
-    return getattr(response, "text", "") or ""
+
+    for attempt in range(_MAX_ATTEMPTS):
+        try:
+            response = client.models.generate_content(model=model_name, contents=prompt)
+            return getattr(response, "text", "") or ""
+        except Exception as exc:  # noqa: BLE001
+            # Drop the cached client so a fixed key / transient failure can recover without restart.
+            _client = None
+            client = get_gemini_client()
+            if _is_retryable(exc) and attempt < _MAX_ATTEMPTS - 1:
+                time.sleep(2 ** attempt)  # 1s, 2s, 4s
+                continue
+            raise
+    return ""
+
+
+def generate_text(prompt: str, model_name: str = DEFAULT_MODEL) -> str:
+    """Send a single-turn prompt to Gemini and return the response text.
+
+    Retries transient server errors (503 overloaded, 429 rate limit) with
+    exponential backoff. If the primary model stays overloaded, falls back to
+    alternative models so a busy server doesn't break the run.
+    """
+    models_to_try = [model_name, *(m for m in _FALLBACK_MODELS if m != model_name)]
+
+    last_exc: Exception | None = None
+    for model in models_to_try:
+        try:
+            return _generate_once(model, prompt)
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            # Only move on to a fallback model for transient/overload errors.
+            if _is_retryable(exc):
+                continue
+            raise
+
+    if last_exc:
+        raise last_exc
+    return ""
 
 
 def strip_json_fences(text: str) -> str:
