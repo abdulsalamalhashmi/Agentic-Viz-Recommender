@@ -66,21 +66,36 @@ def _parse_evaluations(raw_text: str, viz_specs: list[dict]) -> list[dict[str, A
     if not isinstance(parsed, list):
         raise ValueError("Evaluator response is not a JSON array")
 
-    titles = [spec.get("title") for spec in viz_specs]
-    results: list[dict[str, Any]] = []
+    spec_titles = [spec.get("title") for spec in viz_specs]
 
-    for idx, item in enumerate(parsed):
+    # Match returned items to charts by title first; hold anything unmatched
+    # back for positional fallback. This avoids attaching a score to the wrong
+    # chart when the model reorders or omits titles.
+    by_title: dict[Any, dict] = {}
+    leftovers: list[dict] = []
+    for item in parsed:
         if not isinstance(item, dict):
+            continue
+        title = item.get("visualization")
+        if title and title in spec_titles and title not in by_title:
+            by_title[title] = item
+        else:
+            leftovers.append(item)
+
+    results: list[dict[str, Any]] = []
+    for idx, spec_title in enumerate(spec_titles):
+        item = by_title.get(spec_title)
+        if item is None and leftovers:
+            item = leftovers.pop(0)  # positional fallback for untitled items
+        if item is None:
             continue
         score = _coerce_score(item.get("score"))
         if score is None:
             continue
-        title = item.get("visualization") or (titles[idx] if idx < len(titles) else f"Chart {idx + 1}")
-        feedback = item.get("feedback") or ""
         results.append({
-            "visualization": title,
+            "visualization": spec_title or item.get("visualization") or f"Chart {idx + 1}",
             "score": score,
-            "feedback": feedback,
+            "feedback": item.get("feedback") or "",
         })
 
     return results

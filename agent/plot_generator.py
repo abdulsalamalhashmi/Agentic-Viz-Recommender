@@ -7,14 +7,43 @@ from typing import Any
 import pandas as pd
 import plotly.express as px
 
+# A discrete colour legend with hundreds of entries freezes the browser, so
+# only colour by a categorical column when its cardinality is reasonable.
+# Continuous (numeric) colour uses a colourbar and is always fine.
+MAX_COLOR_CATEGORIES = 20
+
+# Cap the number of points sent to point-per-row charts (scatter) so a
+# ~19k-row dataset doesn't render tens of thousands of marks client-side.
+MAX_SCATTER_POINTS = 5000
+
+
+def _safe_color(df: pd.DataFrame, spec: dict[str, Any]) -> str | None:
+    """Return a usable colour column, or None if it would explode the legend."""
+    color = spec.get("color_by")
+    if not color or color not in df.columns:
+        return None
+    if pd.api.types.is_numeric_dtype(df[color]):
+        return color  # continuous colourbar, no legend blow-up
+    if df[color].nunique(dropna=True) > MAX_COLOR_CATEGORIES:
+        return None
+    return color
+
+
+def _maybe_sample(df: pd.DataFrame, max_points: int = MAX_SCATTER_POINTS) -> pd.DataFrame:
+    """Down-sample large frames for point-per-row charts (deterministic)."""
+    if len(df) > max_points:
+        return df.sample(max_points, random_state=0)
+    return df
+
 
 def _scatter(df: pd.DataFrame, spec: dict[str, Any]):
     cols = spec["columns"]
     if len(cols) < 2:
         raise ValueError("scatter requires two columns")
     x, y = cols[0], cols[1]
-    color = spec.get("color_by")
-    return px.scatter(df, x=x, y=y, color=color, title=spec.get("title"))
+    color = _safe_color(df, spec)
+    plot_df = _maybe_sample(df)
+    return px.scatter(plot_df, x=x, y=y, color=color, title=spec.get("title"))
 
 
 def _bar(df: pd.DataFrame, spec: dict[str, Any], top_n: int = 20):
@@ -29,7 +58,7 @@ def _bar(df: pd.DataFrame, spec: dict[str, Any], top_n: int = 20):
 
 def _histogram(df: pd.DataFrame, spec: dict[str, Any]):
     col = spec["columns"][0]
-    color = spec.get("color_by")
+    color = _safe_color(df, spec)
     return px.histogram(df, x=col, color=color, title=spec.get("title"))
 
 
@@ -60,8 +89,8 @@ def _line(df: pd.DataFrame, spec: dict[str, Any]):
     if not pd.api.types.is_datetime64_any_dtype(plot_df[x]):
         plot_df[x] = pd.to_datetime(plot_df[x], errors="coerce")
     plot_df = plot_df.dropna(subset=[x]).sort_values(x)
-    color = spec.get("color_by")
-    if color and color in df.columns:
+    color = _safe_color(df, spec)
+    if color:
         plot_df[color] = df.loc[plot_df.index, color]
     return px.line(plot_df, x=x, y=y, color=color, title=spec.get("title"))
 
@@ -75,7 +104,7 @@ def _box(df: pd.DataFrame, spec: dict[str, Any]):
         x, y = b, a
     else:
         x, y = a, b
-    return px.box(df, x=x, y=y, color=spec.get("color_by"), title=spec.get("title"))
+    return px.box(df, x=x, y=y, color=_safe_color(df, spec), title=spec.get("title"))
 
 
 def _pie(df: pd.DataFrame, spec: dict[str, Any]):
@@ -100,12 +129,16 @@ _BUILDERS = {
 
 
 def generate_plots(df: pd.DataFrame, viz_specs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return one result dict per spec: {spec, figure, error}."""
+    """Return one result dict per spec: {spec, figure, error, html}.
+
+    The download HTML is rendered once here (not on every Streamlit rerun) so
+    repeated UI interactions stay fast even with several large charts.
+    """
     results: list[dict[str, Any]] = []
     for spec in viz_specs:
         chart_type = spec.get("chart_type")
         builder = _BUILDERS.get(chart_type)
-        result = {"spec": spec, "figure": None, "error": None}
+        result: dict[str, Any] = {"spec": spec, "figure": None, "error": None, "html": None}
 
         if builder is None:
             result["error"] = f"Unsupported chart_type: {chart_type!r}"
@@ -113,7 +146,9 @@ def generate_plots(df: pd.DataFrame, viz_specs: list[dict[str, Any]]) -> list[di
             continue
 
         try:
-            result["figure"] = builder(df, spec)
+            figure = builder(df, spec)
+            result["figure"] = figure
+            result["html"] = figure.to_html(include_plotlyjs="cdn")
         except Exception as exc:  # noqa: BLE001 - one bad chart shouldn't kill the loop
             result["error"] = str(exc)
 

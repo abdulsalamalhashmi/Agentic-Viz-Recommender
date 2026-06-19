@@ -26,7 +26,12 @@ def _read_uploaded(file) -> pd.DataFrame:
     buffer = io.BytesIO(data)
     if name.endswith((".xlsx", ".xls")):
         return pd.read_excel(buffer)
-    return pd.read_csv(buffer)
+    # CSV: try UTF-8 first, fall back to latin-1 for non-UTF-8 files.
+    try:
+        return pd.read_csv(buffer)
+    except UnicodeDecodeError:
+        buffer.seek(0)
+        return pd.read_csv(buffer, encoding="latin-1")
 
 
 def _score_badge(score: int) -> str:
@@ -94,13 +99,14 @@ def _render_plots(plots: list[dict[str, Any]], key_prefix: str = "plots") -> Non
                 st.error(f"Could not render this chart: {plot['error']}")
             elif plot["figure"] is not None:
                 st.plotly_chart(plot["figure"], use_container_width=True)
-                st.download_button(
-                    "Download chart",
-                    data=plot["figure"].to_html(include_plotlyjs="cdn"),
-                    file_name=f"{_safe_filename(title)}.html",
-                    mime="text/html",
-                    key=f"{key_prefix}_dl_{i}",
-                )
+                if plot.get("html"):
+                    st.download_button(
+                        "Download chart",
+                        data=plot["html"],
+                        file_name=f"{_safe_filename(title)}.html",
+                        mime="text/html",
+                        key=f"{key_prefix}_dl_{i}",
+                    )
             reasoning = spec.get("reasoning")
             if reasoning:
                 st.caption(reasoning)
@@ -198,13 +204,14 @@ def main() -> None:
         run_clicked = st.button("Run Agent", type="primary", disabled=uploaded is None)
 
     if uploaded is None:
-        st.info("Upload a CSV or Excel file in the sidebar to begin.")
+        st.info("Upload a CSV or Excel file above to begin.")
         return
 
-    if "df_name" not in st.session_state or st.session_state.df_name != uploaded.name:
+    file_key = (uploaded.name, uploaded.size)
+    if "df_key" not in st.session_state or st.session_state.df_key != file_key:
         try:
             st.session_state.df = _read_uploaded(uploaded)
-            st.session_state.df_name = uploaded.name
+            st.session_state.df_key = file_key
             st.session_state.pop("results", None)
         except Exception as exc:  # noqa: BLE001
             st.error(f"Could not read file: {exc}")
@@ -221,7 +228,7 @@ def main() -> None:
 
     results = st.session_state.get("results")
     if not results:
-        st.info("Click **Run Agent** in the sidebar to start the pipeline.")
+        st.info("Click **Run Agent** above to start the pipeline.")
         return
 
     if show_profile:
