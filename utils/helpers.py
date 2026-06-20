@@ -153,3 +153,57 @@ def summarize_viz_specs(viz_specs: list[dict]) -> str:
         for spec in viz_specs
     ]
     return json.dumps(trimmed, indent=2, default=str)
+
+
+# Ordered (markers -> friendly message). First matching group wins.
+_FRIENDLY_ERRORS: tuple[tuple[tuple[str, ...], str], ...] = (
+    (
+        ("503", "unavailable", "overloaded", "high demand"),
+        "The AI service is busy right now — please click **Run Agent** again in a moment.",
+    ),
+    (
+        ("429", "resource_exhausted", "rate limit", "rate-limit", "quota", "exceeded"),
+        "The AI service is rate-limited (too many requests). Wait a minute, then try again.",
+    ),
+    (
+        ("permission", "401", "403", "unauthenticated", "invalid authentication",
+         "api key not valid", "api_key", "invalid api key"),
+        "The Gemini API key looks missing, invalid, or unauthorized. Check the "
+        "`GEMINI_API_KEY` secret on the Space (or your local `.env`).",
+    ),
+    (
+        ("deadline", "timeout", "timed out"),
+        "The AI service took too long to respond. Please try again.",
+    ),
+    (
+        ("safety", "blocked", "candidate", "finish_reason"),
+        "The AI declined to answer for this dataset (a safety filter). Try a "
+        "different file, or run it again.",
+    ),
+)
+
+
+def friendly_error(exc: Exception | str) -> str:
+    """Translate a raw SDK/network error into a calm, plain-language message.
+
+    Falls back to a short one-line detail rather than dumping raw JSON like
+    `503 UNAVAILABLE {'error': ...}` at the user.
+    """
+    text = str(exc).strip()
+    low = text.lower()
+
+    if "gemini_api_key is not set" in low:
+        return (
+            "No Gemini API key found. Add `GEMINI_API_KEY` to a `.env` locally, "
+            "or as a Space secret on Hugging Face."
+        )
+
+    for markers, message in _FRIENDLY_ERRORS:
+        if any(marker in low for marker in markers):
+            return message
+
+    short = text.splitlines()[0][:160] if text else "unknown error"
+    return (
+        "Something went wrong talking to the AI service. Please try again. "
+        f"(Details: {short})"
+    )
