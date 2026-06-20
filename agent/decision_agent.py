@@ -123,7 +123,7 @@ def _validate_specs(specs: list[dict[str, Any]], profile: dict) -> list[dict[str
             "columns": spec_cols,
             "chart_type": chart_type,
             "color_by": color_by,
-            "title": spec.get("title") or f"{chart_type.title()} of {', '.join(spec_cols)}",
+            "title": spec.get("title") or f"{chart_type.replace('_', ' ').title()} of {', '.join(spec_cols)}",
             "reasoning": spec.get("reasoning") or "",
         })
 

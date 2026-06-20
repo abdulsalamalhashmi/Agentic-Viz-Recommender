@@ -86,7 +86,9 @@ def _line(df: pd.DataFrame, spec: dict[str, Any]):
         raise ValueError("line requires a datetime column and a numeric column")
     x, y = cols[0], cols[1]
     plot_df = df[[x, y]].copy()
-    if not pd.api.types.is_datetime64_any_dtype(plot_df[x]):
+    if not pd.api.types.is_datetime64_any_dtype(plot_df[x]) and not pd.api.types.is_numeric_dtype(plot_df[x]):
+        # Keep a numeric x (e.g. a "year" column) numeric — coercing integers to
+        # datetime would read them as nanoseconds and collapse everything to 1970.
         plot_df[x] = pd.to_datetime(plot_df[x], errors="coerce")
     plot_df = plot_df.dropna(subset=[x]).sort_values(x)
     color = _safe_color(df, spec)
@@ -148,7 +150,9 @@ def _area(df: pd.DataFrame, spec: dict[str, Any]):
         raise ValueError("area requires a datetime column and a numeric column")
     x, y = cols[0], cols[1]
     plot_df = df[[x, y]].copy()
-    if not pd.api.types.is_datetime64_any_dtype(plot_df[x]):
+    if not pd.api.types.is_datetime64_any_dtype(plot_df[x]) and not pd.api.types.is_numeric_dtype(plot_df[x]):
+        # Keep a numeric x (e.g. a "year" column) numeric — coercing integers to
+        # datetime would read them as nanoseconds and collapse everything to 1970.
         plot_df[x] = pd.to_datetime(plot_df[x], errors="coerce")
     plot_df = plot_df.dropna(subset=[x]).sort_values(x)
     color = _safe_color(df, spec)
