@@ -245,7 +245,7 @@ def _run_agent_pipeline(
                 }
                 if evaluations_v2:
                     avg2 = sum(e["score"] for e in evaluations_v2) / len(evaluations_v2)
-                    trend = "improved" if avg2 > avg else "about the same"
+                    trend = "improved" if avg2 > avg else ("lower" if avg2 < avg else "about the same")
                     log.append(
                         f"Re-ran once with the feedback — new average {avg2:.1f}/5 ({trend})."
                     )

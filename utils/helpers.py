@@ -162,7 +162,7 @@ _FRIENDLY_ERRORS: tuple[tuple[tuple[str, ...], str], ...] = (
         "The AI service is busy right now — please click **Run Agent** again in a moment.",
     ),
     (
-        ("429", "resource_exhausted", "rate limit", "rate-limit", "quota", "exceeded"),
+        ("429", "resource_exhausted", "rate limit", "rate-limit", "quota"),
         "The AI service is rate-limited (too many requests). Wait a minute, then try again.",
     ),
     (

@@ -128,7 +128,7 @@ def _grouped_bar(df: pd.DataFrame, spec: dict[str, Any], top_n: int = 15):
             f"grouped_bar skipped: '{group}' has more than {MAX_COLOR_CATEGORIES} categories"
         )
     counts = (
-        df.assign(**{group: df[group].astype(str)})
+        df.assign(**{group: df[group].map(lambda v: "(missing)" if pd.isna(v) else str(v))})
         .groupby([x, group], dropna=False)
         .size()
         .reset_index(name="count")
@@ -165,7 +165,8 @@ def _treemap(df: pd.DataFrame, spec: dict[str, Any], top_n: int = 30):
     counts = df.groupby(path, dropna=False).size().reset_index(name="count")
     counts = counts.nlargest(top_n, "count")
     for col in path:
-        counts[col] = counts[col].astype(str)  # treemap paths must be non-null strings
+        # treemap paths must be non-null strings (a None parent makes plotly raise)
+        counts[col] = counts[col].map(lambda v: "(missing)" if pd.isna(v) else str(v))
     return px.treemap(counts, path=path, values="count", title=spec.get("title"))
 
 
