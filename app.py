@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 from typing import Any
 
@@ -20,11 +21,9 @@ st.set_page_config(
 )
 
 
-def _read_uploaded(file) -> pd.DataFrame:
-    name = file.name.lower()
-    data = file.read()
+def _read_uploaded(name: str, data: bytes) -> pd.DataFrame:
     buffer = io.BytesIO(data)
-    if name.endswith((".xlsx", ".xls")):
+    if name.lower().endswith((".xlsx", ".xls")):
         return pd.read_excel(buffer)
     # CSV: try UTF-8 first, fall back to latin-1 for non-UTF-8 files.
     try:
@@ -207,10 +206,13 @@ def main() -> None:
         st.info("Upload a CSV or Excel file above to begin.")
         return
 
-    file_key = (uploaded.name, uploaded.size)
+    data = uploaded.getvalue()
+    # Key on a content hash (not just name + size) so two different files that
+    # happen to share a name and byte size don't reuse a stale DataFrame.
+    file_key = (uploaded.name, hashlib.md5(data).hexdigest())
     if "df_key" not in st.session_state or st.session_state.df_key != file_key:
         try:
-            st.session_state.df = _read_uploaded(uploaded)
+            st.session_state.df = _read_uploaded(uploaded.name, data)
             st.session_state.df_key = file_key
             st.session_state.pop("results", None)
         except Exception as exc:  # noqa: BLE001
@@ -228,7 +230,10 @@ def main() -> None:
 
     results = st.session_state.get("results")
     if not results:
-        st.info("Click **Run Agent** above to start the pipeline.")
+        # A failed run already surfaced its own error; only show the start hint
+        # before the first run so the two messages don't contradict each other.
+        if not run_clicked:
+            st.info("Click **Run Agent** above to start the pipeline.")
         return
 
     if show_profile:
@@ -271,6 +276,11 @@ def main() -> None:
         with col_c:
             st.markdown("**Successfully rendered**")
             st.markdown(f"### {rendered}")
+        if len(final_evals) < len(final_specs):
+            st.caption(
+                f"⚠️ The critic scored {len(final_evals)} of {len(final_specs)} "
+                "charts; the rest were left unscored."
+            )
     else:
         st.info("No evaluations available for summary.")
 

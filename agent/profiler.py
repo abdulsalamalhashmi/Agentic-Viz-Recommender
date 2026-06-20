@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import re
 from typing import Any
@@ -45,9 +46,14 @@ def _classify_column(name: str, series: pd.Series, n_rows: int) -> str:
     if DATETIME_NAME_PATTERN.search(name):
         return "datetime"
 
-    # 5. boolean by exactly two non-null unique values
+    # 5. boolean: two distinct values. For numeric dtypes, only call it boolean
+    #    when the values are a 0/1 flag — otherwise a 2-valued measurement should
+    #    keep flowing through the numeric path below (stats, correlations).
     if n_unique == 2:
-        return "boolean"
+        if not pd.api.types.is_numeric_dtype(series):
+            return "boolean"
+        if set(series.dropna().unique()) <= {0, 1}:
+            return "boolean"
 
     # 6. numeric: float/int with reasonable cardinality
     if pd.api.types.is_numeric_dtype(series):
@@ -94,19 +100,40 @@ def _top_correlations(df: pd.DataFrame, numeric_cols: list[str], top_n: int = 5)
     return pairs[:top_n]
 
 
+_MAX_SAMPLE_STR = 200  # truncate long cell strings before they reach the prompt
+
+
 def _json_safe_sample(df: pd.DataFrame, n: int = 3) -> list[dict[str, Any]]:
+    """Sample rows as JSON-safe dicts: NaN/NaT -> null, numpy scalars -> Python.
+
+    Long string cells are truncated so a pathological value can't bloat — or
+    smuggle instructions into — the LLM prompt.
+    """
     sample = df.head(n).copy()
     for col in sample.columns:
         if pd.api.types.is_datetime64_any_dtype(sample[col]):
             sample[col] = sample[col].astype(str)
-    sample = sample.where(pd.notna(sample), None)
-    return sample.to_dict(orient="records")
+    # to_json maps NaN/inf -> null and numpy scalars -> JSON numbers; round-trip
+    # back to plain Python types so a later json.dumps emits clean values
+    # (no bare NaN tokens, no integers stringified by a default= fallback).
+    records = json.loads(sample.to_json(orient="records"))
+    for record in records:
+        for key, value in record.items():
+            if isinstance(value, str) and len(value) > _MAX_SAMPLE_STR:
+                record[key] = value[:_MAX_SAMPLE_STR] + "…"
+    return records
 
 
 def profile_dataset(df: pd.DataFrame) -> dict[str, Any]:
     """Return a structured profile of `df` consumable by the decision/evaluator agents."""
     if not isinstance(df, pd.DataFrame):
         raise TypeError("profile_dataset expects a pandas DataFrame")
+    if df.columns.duplicated().any():
+        dupes = sorted({str(c) for c in df.columns[df.columns.duplicated()]})
+        raise ValueError(
+            "Duplicate column names are not supported; please make them unique: "
+            + ", ".join(dupes)
+        )
 
     n_rows, n_cols = df.shape
 

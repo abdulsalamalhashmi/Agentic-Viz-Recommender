@@ -94,12 +94,18 @@ def generate_text(prompt: str, model_name: str = DEFAULT_MODEL) -> str:
 
 
 def strip_json_fences(text: str) -> str:
-    """Remove ```json / ``` markdown fences that Gemini sometimes returns."""
+    """Remove ```json / ``` markdown fences that Gemini sometimes returns.
+
+    Handles any opening fence tag case-insensitively (```json, ```JSON,
+    ```python, or a bare ```), not just lowercase ```json, by dropping the
+    whole opening fence line.
+    """
     cleaned = text.strip()
     if cleaned.startswith("```"):
-        cleaned = cleaned.removeprefix("```json").removeprefix("```").lstrip()
+        newline = cleaned.find("\n")
+        cleaned = cleaned[newline + 1:] if newline != -1 else cleaned[3:]
     if cleaned.endswith("```"):
-        cleaned = cleaned.removesuffix("```").rstrip()
+        cleaned = cleaned[:-3]
     return cleaned.strip()
 
 

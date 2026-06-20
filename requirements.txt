@@ -5,3 +5,4 @@ plotly
 google-genai
 python-dotenv
 openpyxl
+xlrd
