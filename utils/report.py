@@ -58,7 +58,7 @@ def build_report_html(
     ]
 
     if story:
-        out.append(f"<div class='card'><h2>✨ Data story</h2><p>{_esc(story)}</p></div>")
+        out.append(f"<div class='card'><h2>Data story</h2><p>{_esc(story)}</p></div>")
 
     out.append("<div class='card'><h2>Data profile</h2>")
     out.append("<table><tr><th>Column</th><th>Type</th></tr>")

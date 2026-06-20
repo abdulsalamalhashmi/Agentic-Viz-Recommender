@@ -40,12 +40,15 @@ def _read_uploaded(name: str, data: bytes) -> pd.DataFrame:
         return pd.read_csv(buffer, encoding="latin-1")
 
 
-def _score_badge(score: int) -> str:
+def _score_label(score: int) -> str:
+    """A Material icon plus the colored score, e.g. ':material/check_circle: :green[**5/5**]'."""
     if score >= 4:
-        return "🟢"
-    if score == 3:
-        return "🟡"
-    return "🔴"
+        color, icon = "green", "check_circle"
+    elif score == 3:
+        color, icon = "orange", "warning"
+    else:
+        color, icon = "red", "cancel"
+    return f":material/{icon}: :{color}[**{score}/5**]"
 
 
 def _safe_filename(title: str) -> str:
@@ -129,11 +132,10 @@ def _render_reasoning_log(results: dict[str, Any]) -> None:
     log = results.get("log") or []
     if not log:
         return
-    badges = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣"]
     with st.container(border=True):
-        st.markdown("#### 🧠 Agent reasoning log")
-        for idx, step in enumerate(log):
-            st.markdown(f"{badges[idx] if idx < len(badges) else '▶️'} {step}")
+        st.markdown("#### :material/psychology: Agent reasoning log")
+        for step in log:
+            st.markdown(f":material/chevron_right: {step}")
 
 
 def _render_cards(
@@ -149,7 +151,7 @@ def _render_cards(
         with st.container(border=True):
             header = f"**{i}. {title}**"
             if ev:
-                header += f" — {_score_badge(ev['score'])} **{ev['score']}/5**"
+                header += f" — {_score_label(ev['score'])}"
             st.markdown(header)
 
             cols = ", ".join(spec.get("columns", []))
@@ -173,7 +175,7 @@ def _render_cards(
             if spec.get("reasoning"):
                 st.markdown(f"**Why this chart:** {spec['reasoning']}")
             if ev and ev.get("feedback"):
-                st.caption(f"🧪 Critic: {ev['feedback']}")
+                st.caption(f":material/fact_check: Critic: {ev['feedback']}")
 
 
 # --------------------------------------------------------------------------- #
@@ -353,7 +355,7 @@ def main() -> None:
         return
 
     if not run_clicked:
-        st.caption("✓ Showing saved results for this file — no new API calls. Click **Run Agent** to re-run.")
+        st.caption(":material/check_circle: Showing saved results for this file — no new API calls. Click **Run Agent** to re-run.")
 
     final_specs = results["final_specs"]
     final_plots = results["final_plots"]
@@ -368,7 +370,7 @@ def main() -> None:
 
     # Attempt 1 kept for transparency when a re-run happened.
     if results.get("rerun"):
-        with st.expander("🔎 Attempt 1 (before the critic-driven re-run)", expanded=False):
+        with st.expander(":material/search: Attempt 1 (before the critic-driven re-run)", expanded=False):
             st.caption("Feedback the critic gave on attempt 1:")
             st.code(results["rerun"]["feedback"])
             _render_cards(results["plots"], results["evaluations"], key_prefix="v1")
@@ -376,7 +378,7 @@ def main() -> None:
     # --- #6 Data story (on-demand, one extra LLM call) ---
     story = story_cache.get(file_hash)
     with st.container(border=True):
-        st.markdown("#### ✨ Data story")
+        st.markdown("#### :material/auto_awesome: Data story")
         if story is None:
             st.caption("Generate a short, plain-language summary of what these charts reveal (uses one extra AI call).")
             if st.button("Generate data story"):
@@ -406,7 +408,7 @@ def main() -> None:
         col_c.metric("Rendered OK", f"{rendered}/{len(final_plots)}")
         if len(final_evals) < len(final_specs):
             st.caption(
-                f"⚠️ The critic scored {len(final_evals)} of {len(final_specs)} "
+                f":material/warning: The critic scored {len(final_evals)} of {len(final_specs)} "
                 "charts; the rest were left unscored."
             )
     else:
@@ -414,7 +416,7 @@ def main() -> None:
 
     if results.get("report_html"):
         st.download_button(
-            "⬇️ Download full report (HTML)",
+            "Download full report (HTML)",
             data=results["report_html"],
             file_name=f"{_safe_filename(uploaded.name)}_report.html",
             mime="text/html",
