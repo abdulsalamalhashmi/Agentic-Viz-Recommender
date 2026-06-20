@@ -7,7 +7,10 @@ from typing import Any
 
 from utils.helpers import generate_text, strip_json_fences, summarize_profile
 
-VALID_CHART_TYPES = {"scatter", "bar", "histogram", "heatmap", "line", "box", "pie"}
+VALID_CHART_TYPES = {
+    "scatter", "bar", "grouped_bar", "histogram", "heatmap",
+    "line", "area", "box", "pie", "treemap",
+}
 
 RULES_BLOCK = """\
 Visualization Rules:
@@ -17,8 +20,12 @@ Visualization Rules:
 - Use heatmap for correlation matrix when there are 4+ numeric columns
 - Use line chart only if a datetime column exists (x=datetime, y=numeric)
 - Use box plot to compare a numeric column across categories
+- Prefer grouped_bar over two separate bar charts when two categorical columns exist, to show how one breaks down by the other (columns=[category_x, category_group])
+- Use area for a datetime column vs a numeric column to emphasize the magnitude/volume of a trend (columns=[datetime, numeric])
+- Prefer treemap over bar or pie for the composition of a categorical column with many categories (categories > 6); you may nest a second category as columns=[category, subcategory]
 - Avoid pie charts when unique categories > 6
 - Skip columns classified as "id"
+- Favor a diverse mix of chart types rather than repeating one type; when the data supports it, include at least one of grouped_bar, area, or treemap
 - Generate between 3 and 6 visualizations total"""
 
 EXAMPLE_BLOCK = """\
@@ -67,7 +74,8 @@ def _build_retry_prompt(profile: dict, feedback: str | None) -> str:
     return (
         "Return ONLY a JSON array (no prose, no markdown fences) of 3-6 visualization "
         "specs for the dataset described below. Each item must have keys: columns "
-        "(list of strings), chart_type (one of scatter, bar, histogram, heatmap, line, box, pie), "
+        "(list of strings), chart_type (one of scatter, bar, grouped_bar, histogram, "
+        "heatmap, line, area, box, pie, treemap), "
         "color_by (string or null), title (string), reasoning (string). "
         "Skip any column whose type is 'id'.\n\n"
         f"Dataset Profile:\n{profile_summary}\n"

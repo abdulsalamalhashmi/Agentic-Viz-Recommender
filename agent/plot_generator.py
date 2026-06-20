@@ -117,14 +117,69 @@ def _pie(df: pd.DataFrame, spec: dict[str, Any]):
     return px.pie(counts, names=col, values="count", title=spec.get("title"))
 
 
+def _grouped_bar(df: pd.DataFrame, spec: dict[str, Any], top_n: int = 15):
+    """Counts of one categorical column broken down by a second (grouped bars)."""
+    cols = spec["columns"]
+    if len(cols) < 2:
+        raise ValueError("grouped_bar requires two categorical columns")
+    x, group = cols[0], cols[1]
+    if df[group].nunique(dropna=True) > MAX_COLOR_CATEGORIES:
+        raise ValueError(
+            f"grouped_bar skipped: '{group}' has more than {MAX_COLOR_CATEGORIES} categories"
+        )
+    counts = (
+        df.assign(**{group: df[group].astype(str)})
+        .groupby([x, group], dropna=False)
+        .size()
+        .reset_index(name="count")
+    )
+    top = counts.groupby(x)["count"].sum().nlargest(top_n).index
+    counts = counts[counts[x].isin(top)]
+    title = spec.get("title")
+    if df[x].nunique(dropna=False) > top_n:
+        title = f"{title} (top {top_n})" if title else f"Top {top_n}"
+    return px.bar(counts, x=x, y="count", color=group, barmode="group", title=title)
+
+
+def _area(df: pd.DataFrame, spec: dict[str, Any]):
+    """Filled trend of a numeric column over a datetime column."""
+    cols = spec["columns"]
+    if len(cols) < 2:
+        raise ValueError("area requires a datetime column and a numeric column")
+    x, y = cols[0], cols[1]
+    plot_df = df[[x, y]].copy()
+    if not pd.api.types.is_datetime64_any_dtype(plot_df[x]):
+        plot_df[x] = pd.to_datetime(plot_df[x], errors="coerce")
+    plot_df = plot_df.dropna(subset=[x]).sort_values(x)
+    color = _safe_color(df, spec)
+    if color:
+        plot_df[color] = df.loc[plot_df.index, color]
+    return px.area(plot_df, x=x, y=y, color=color, title=spec.get("title"))
+
+
+def _treemap(df: pd.DataFrame, spec: dict[str, Any], top_n: int = 30):
+    """Part-to-whole composition of one (or two nested) categorical columns."""
+    path = [c for c in (spec.get("columns") or [])][:2]
+    if not path:
+        raise ValueError("treemap requires at least one categorical column")
+    counts = df.groupby(path, dropna=False).size().reset_index(name="count")
+    counts = counts.nlargest(top_n, "count")
+    for col in path:
+        counts[col] = counts[col].astype(str)  # treemap paths must be non-null strings
+    return px.treemap(counts, path=path, values="count", title=spec.get("title"))
+
+
 _BUILDERS = {
     "scatter": _scatter,
     "bar": _bar,
+    "grouped_bar": _grouped_bar,
     "histogram": _histogram,
     "heatmap": _heatmap,
     "line": _line,
+    "area": _area,
     "box": _box,
     "pie": _pie,
+    "treemap": _treemap,
 }
 
 
