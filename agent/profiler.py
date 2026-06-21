@@ -55,9 +55,13 @@ def _classify_column(name: str, series: pd.Series, n_rows: int) -> str:
         if set(series.dropna().unique()) <= {0, 1}:
             return "boolean"
 
-    # 6. numeric: float/int with reasonable cardinality
+    # 6. numeric: float/int with reasonable cardinality.
+    #    The 10%-of-rows rule alone misclassifies real numeric columns (age,
+    #    ratings, prices) as categorical on large datasets — on 18k rows it
+    #    demands >1800 distinct values — so also accept any numeric column with a
+    #    reasonable absolute number of distinct values.
     if pd.api.types.is_numeric_dtype(series):
-        if n_rows == 0 or n_unique > 0.10 * n_rows:
+        if n_rows == 0 or n_unique > 0.10 * n_rows or n_unique >= 20:
             return "numeric"
         return "categorical"
 
