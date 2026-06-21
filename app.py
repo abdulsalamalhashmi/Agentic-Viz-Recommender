@@ -41,14 +41,14 @@ def _read_uploaded(name: str, data: bytes) -> pd.DataFrame:
 
 
 def _score_label(score: int) -> str:
-    """A Material icon plus the colored score, e.g. ':material/check_circle: :green[**5/5**]'."""
+    """The critic score as colored bold text (green = good, orange = ok, red = weak)."""
     if score >= 4:
-        color, icon = "green", "check_circle"
+        color = "green"
     elif score == 3:
-        color, icon = "orange", "warning"
+        color = "orange"
     else:
-        color, icon = "red", "cancel"
-    return f":material/{icon}: :{color}[**{score}/5**]"
+        color = "red"
+    return f":{color}[**Score: {score}/5**]"
 
 
 def _safe_filename(title: str) -> str:
@@ -133,9 +133,9 @@ def _render_reasoning_log(results: dict[str, Any]) -> None:
     if not log:
         return
     with st.container(border=True):
-        st.markdown("#### :material/psychology: Agent reasoning log")
-        for step in log:
-            st.markdown(f":material/chevron_right: {step}")
+        st.markdown("#### Agent reasoning log")
+        for i, step in enumerate(log, start=1):
+            st.markdown(f"**{i}.** {step}")
 
 
 def _render_cards(
@@ -175,7 +175,7 @@ def _render_cards(
             if spec.get("reasoning"):
                 st.markdown(f"**Why this chart:** {spec['reasoning']}")
             if ev and ev.get("feedback"):
-                st.caption(f":material/fact_check: Critic: {ev['feedback']}")
+                st.caption(f"Critic: {ev['feedback']}")
 
 
 # --------------------------------------------------------------------------- #
@@ -355,7 +355,7 @@ def main() -> None:
         return
 
     if not run_clicked:
-        st.caption(":material/check_circle: Showing saved results for this file — no new API calls. Click **Run Agent** to re-run.")
+        st.caption("Showing saved results for this file — no new API calls. Click **Run Agent** to re-run.")
 
     final_specs = results["final_specs"]
     final_plots = results["final_plots"]
@@ -370,7 +370,7 @@ def main() -> None:
 
     # Attempt 1 kept for transparency when a re-run happened.
     if results.get("rerun"):
-        with st.expander(":material/search: Attempt 1 (before the critic-driven re-run)", expanded=False):
+        with st.expander("Attempt 1 (before the critic-driven re-run)", expanded=False):
             st.caption("Feedback the critic gave on attempt 1:")
             st.code(results["rerun"]["feedback"])
             _render_cards(results["plots"], results["evaluations"], key_prefix="v1")
@@ -378,7 +378,7 @@ def main() -> None:
     # --- #6 Data story (on-demand, one extra LLM call) ---
     story = story_cache.get(file_hash)
     with st.container(border=True):
-        st.markdown("#### :material/auto_awesome: Data story")
+        st.markdown("#### Data story")
         if story is None:
             st.caption("Generate a short, plain-language summary of what these charts reveal (uses one extra AI call).")
             if st.button("Generate data story"):
@@ -408,7 +408,7 @@ def main() -> None:
         col_c.metric("Rendered OK", f"{rendered}/{len(final_plots)}")
         if len(final_evals) < len(final_specs):
             st.caption(
-                f":material/warning: The critic scored {len(final_evals)} of {len(final_specs)} "
+                f"Note: the critic scored {len(final_evals)} of {len(final_specs)} "
                 "charts; the rest were left unscored."
             )
     else:

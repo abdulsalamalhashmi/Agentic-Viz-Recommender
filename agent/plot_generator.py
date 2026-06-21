@@ -129,8 +129,11 @@ def _grouped_bar(df: pd.DataFrame, spec: dict[str, Any], top_n: int = 15):
         raise ValueError(
             f"grouped_bar skipped: '{group}' has more than {MAX_COLOR_CATEGORIES} categories"
         )
+    work = df.dropna(subset=[x, group])  # only count rows where both categories are present
+    if work.empty:
+        raise ValueError("grouped_bar has no rows where both categories are present")
     counts = (
-        df.assign(**{group: df[group].map(lambda v: "(missing)" if pd.isna(v) else str(v))})
+        work.assign(**{group: work[group].astype(str)})
         .groupby([x, group], dropna=False)
         .size()
         .reset_index(name="count")
@@ -166,11 +169,13 @@ def _treemap(df: pd.DataFrame, spec: dict[str, Any], top_n: int = 30):
     path = [c for c in (spec.get("columns") or [])][:2]
     if not path:
         raise ValueError("treemap requires at least one categorical column")
-    counts = df.groupby(path, dropna=False).size().reset_index(name="count")
+    work = df.dropna(subset=path)  # a treemap row needs every level present, so drop nulls
+    if work.empty:
+        raise ValueError("treemap has no rows where the chosen categories are all present")
+    counts = work.groupby(path, dropna=False).size().reset_index(name="count")
     counts = counts.nlargest(top_n, "count")
     for col in path:
-        # treemap paths must be non-null strings (a None parent makes plotly raise)
-        counts[col] = counts[col].map(lambda v: "(missing)" if pd.isna(v) else str(v))
+        counts[col] = counts[col].astype(str)
     return px.treemap(counts, path=path, values="count", title=spec.get("title"))
 
 
