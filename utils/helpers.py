@@ -10,7 +10,6 @@ from typing import Any
 
 from dotenv import load_dotenv
 from google import genai
-from google.genai import types
 
 DEFAULT_MODEL = "gemini-2.5-flash"
 
@@ -56,30 +55,14 @@ def _is_rate_limit(exc: Exception) -> bool:
     return any(m in text for m in ("429", "resource_exhausted", "quota", "rate limit", "rate-limit"))
 
 
-def _thinking_config(model_name: str):
-    """Turn off 'thinking' on gemini-2.5 models to cut latency on our JSON tasks.
-
-    Only 2.5 models accept a thinking budget; for the 2.0 / flash-latest fallbacks
-    we send no config so we don't pass an unsupported field.
-    """
-    if "2.5" in model_name:
-        return types.GenerateContentConfig(
-            thinking_config=types.ThinkingConfig(thinking_budget=0)
-        )
-    return None
-
-
 def _generate_once(model_name: str, prompt: str) -> str:
     """Call one model with exponential-backoff retries on transient errors."""
     global _client
     client = get_gemini_client()
-    config = _thinking_config(model_name)
 
     for attempt in range(_MAX_ATTEMPTS):
         try:
-            response = client.models.generate_content(
-                model=model_name, contents=prompt, config=config
-            )
+            response = client.models.generate_content(model=model_name, contents=prompt)
             return getattr(response, "text", "") or ""
         except Exception as exc:  # noqa: BLE001
             # Drop the cached client so a fixed key / transient failure can recover without restart.
