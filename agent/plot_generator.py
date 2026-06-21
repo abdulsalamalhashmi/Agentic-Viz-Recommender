@@ -36,6 +36,15 @@ def _maybe_sample(df: pd.DataFrame, max_points: int = MAX_SCATTER_POINTS) -> pd.
     return df
 
 
+def _count_col(*data_cols: str) -> str:
+    """A name for the counts column that won't collide with the data columns, so a
+    dataset with a column literally named 'count' still renders."""
+    name = "count"
+    while name in data_cols:
+        name += "_"
+    return name
+
+
 def _scatter(df: pd.DataFrame, spec: dict[str, Any]):
     cols = spec["columns"]
     if len(cols) < 2:
@@ -48,12 +57,13 @@ def _scatter(df: pd.DataFrame, spec: dict[str, Any]):
 
 def _bar(df: pd.DataFrame, spec: dict[str, Any], top_n: int = 20):
     col = spec["columns"][0]
-    counts = df[col].value_counts(dropna=False).head(top_n).reset_index()
-    counts.columns = [col, "count"]
+    cnt = _count_col(col)
+    vc = df[col].value_counts(dropna=False).head(top_n)
+    counts = pd.DataFrame({col: vc.index, cnt: vc.to_numpy()})
     title = spec.get("title")
     if df[col].nunique(dropna=False) > top_n:
         title = f"{title} (top {top_n})" if title else f"Top {top_n}"
-    return px.bar(counts, x=col, y="count", title=title)
+    return px.bar(counts, x=col, y=cnt, title=title)
 
 
 def _histogram(df: pd.DataFrame, spec: dict[str, Any]):
@@ -115,9 +125,10 @@ def _pie(df: pd.DataFrame, spec: dict[str, Any]):
     n_unique = int(df[col].nunique(dropna=True))
     if n_unique > 6:
         raise ValueError(f"pie skipped: column '{col}' has {n_unique} unique values (>6)")
-    counts = df[col].value_counts(dropna=False).reset_index()
-    counts.columns = [col, "count"]
-    return px.pie(counts, names=col, values="count", title=spec.get("title"))
+    cnt = _count_col(col)
+    vc = df[col].value_counts(dropna=False)
+    counts = pd.DataFrame({col: vc.index, cnt: vc.to_numpy()})
+    return px.pie(counts, names=col, values=cnt, title=spec.get("title"))
 
 
 def _grouped_bar(df: pd.DataFrame, spec: dict[str, Any], top_n: int = 15):
@@ -133,18 +144,19 @@ def _grouped_bar(df: pd.DataFrame, spec: dict[str, Any], top_n: int = 15):
     work = df.dropna(subset=[x, group])  # only count rows where both categories are present
     if work.empty:
         raise ValueError("grouped_bar has no rows where both categories are present")
+    cnt = _count_col(x, group)
     counts = (
         work.assign(**{group: work[group].astype(str)})
         .groupby([x, group], dropna=False)
         .size()
-        .reset_index(name="count")
+        .reset_index(name=cnt)
     )
-    top = counts.groupby(x)["count"].sum().nlargest(top_n).index
+    top = counts.groupby(x)[cnt].sum().nlargest(top_n).index
     counts = counts[counts[x].isin(top)]
     title = spec.get("title")
     if df[x].nunique(dropna=False) > top_n:
         title = f"{title} (top {top_n})" if title else f"Top {top_n}"
-    return px.bar(counts, x=x, y="count", color=group, barmode="group", title=title)
+    return px.bar(counts, x=x, y=cnt, color=group, barmode="group", title=title)
 
 
 def _area(df: pd.DataFrame, spec: dict[str, Any]):
@@ -173,11 +185,12 @@ def _treemap(df: pd.DataFrame, spec: dict[str, Any], top_n: int = 30):
     work = df.dropna(subset=path)  # a treemap row needs every level present, so drop nulls
     if work.empty:
         raise ValueError("treemap has no rows where the chosen categories are all present")
-    counts = work.groupby(path, dropna=False).size().reset_index(name="count")
-    counts = counts.nlargest(top_n, "count")
+    cnt = _count_col(*path)
+    counts = work.groupby(path, dropna=False).size().reset_index(name=cnt)
+    counts = counts.nlargest(top_n, cnt)
     for col in path:
         counts[col] = counts[col].astype(str)
-    return px.treemap(counts, path=path, values="count", title=spec.get("title"))
+    return px.treemap(counts, path=path, values=cnt, title=spec.get("title"))
 
 
 _BUILDERS = {
