@@ -322,6 +322,12 @@ def main() -> None:
     df: pd.DataFrame = st.session_state.df
 
     st.write(f"**File:** `{uploaded.name}` — {df.shape[0]} rows × {df.shape[1]} columns")
+
+    # Reserve the run-status slot here so the pipeline box appears directly under
+    # the Run Agent button (above the preview/profile), even though the pipeline
+    # actually runs further down — Streamlit renders into the container's position.
+    status_slot = st.container()
+
     with st.expander("Preview first 10 rows", expanded=False):
         st.dataframe(df.head(10), use_container_width=True)
 
@@ -344,7 +350,8 @@ def main() -> None:
     story_cache: dict[str, str] = st.session_state.setdefault("story_cache", {})
     if run_clicked:
         story_cache.pop(file_hash, None)  # a fresh run invalidates the old story
-        results_cache[file_hash] = _run_agent_pipeline(df, profile, uploaded.name)
+        with status_slot:
+            results_cache[file_hash] = _run_agent_pipeline(df, profile, uploaded.name)
     results = results_cache.get(file_hash)
 
     if not results:
