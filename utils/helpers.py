@@ -49,6 +49,13 @@ def _is_retryable(exc: Exception) -> bool:
     return any(marker in text for marker in _RETRYABLE_MARKERS)
 
 
+def _is_rate_limit(exc: Exception) -> bool:
+    """A 429 / quota error: retrying the *same* model soon won't help, so fall
+    back to another model (with its own quota) immediately instead of waiting."""
+    text = str(exc).lower()
+    return any(m in text for m in ("429", "resource_exhausted", "quota", "rate limit", "rate-limit"))
+
+
 def _thinking_config(model_name: str):
     """Turn off 'thinking' on gemini-2.5 models to cut latency on our JSON tasks.
 
@@ -78,7 +85,10 @@ def _generate_once(model_name: str, prompt: str) -> str:
             # Drop the cached client so a fixed key / transient failure can recover without restart.
             _client = None
             client = get_gemini_client()
-            if _is_retryable(exc) and attempt < _MAX_ATTEMPTS - 1:
+            # Back off + retry the same model only for transient overload (503).
+            # On a rate limit (429), don't wait — raise so generate_text falls
+            # back to the next model (separate quota) right away.
+            if _is_retryable(exc) and not _is_rate_limit(exc) and attempt < _MAX_ATTEMPTS - 1:
                 time.sleep(2 ** attempt)  # 1s, 2s, 4s
                 continue
             raise
