@@ -30,7 +30,7 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    section[data-testid="stSidebar"] {
+    [data-testid="stSidebar"] {
         position: sticky !important;
         top: 0 !important;
         align-self: flex-start !important;
@@ -38,7 +38,7 @@ st.markdown(
         overflow-y: auto !important;
         border-right: 1px solid rgba(255, 255, 255, 0.07);
     }
-    section[data-testid="stSidebar"] hr {
+    [data-testid="stSidebar"] hr {
         margin: 0.9rem 0;
         border-color: rgba(255, 255, 255, 0.08);
     }
