@@ -188,7 +188,7 @@ def _render_cards(
             if plot["error"]:
                 st.error(f"Could not render this chart: {plot['error']}")
             elif plot["figure"] is not None:
-                st.plotly_chart(plot["figure"], use_container_width=True)
+                st.plotly_chart(plot["figure"], use_container_width=True, key=f"{key_prefix}_chart_{i}")
                 if plot.get("html"):
                     st.download_button(
                         "Download chart",
