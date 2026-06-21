@@ -22,6 +22,7 @@ st.set_page_config(
     page_title="Agentic Data Visualization Recommender",
     page_icon="📊",
     layout="wide",
+    initial_sidebar_state="expanded",
 )
 
 
@@ -293,6 +294,18 @@ def _run_agent_pipeline(
 # Main
 # --------------------------------------------------------------------------- #
 def main() -> None:
+    # --- Sidebar: inputs & controls ---
+    with st.sidebar:
+        st.header("Controls")
+        uploaded = st.file_uploader("Upload CSV or Excel", type=["csv", "xlsx", "xls"])
+        run_clicked = st.button(
+            "Run Agent",
+            type="primary",
+            disabled=uploaded is None,
+            use_container_width=True,
+        )
+        show_profile = st.toggle("Show data profile", value=True)
+
     st.title("Agentic Data Visualization Recommender")
     st.caption("Upload a dataset and let an AI agent decide how to visualize it — then critique its own choices.")
 
@@ -306,20 +319,8 @@ def main() -> None:
             "5. **Re-run** — if any chart scores below 3, the agent revises once using that feedback."
         )
 
-    uploaded = st.file_uploader("Upload CSV or Excel", type=["csv", "xlsx", "xls"])
-    run_col, toggle_col, _spacer = st.columns([1, 1, 2])
-    with run_col:
-        run_clicked = st.button(
-            "Run Agent",
-            type="primary",
-            disabled=uploaded is None,
-            use_container_width=True,
-        )
-    with toggle_col:
-        show_profile = st.toggle("Show data profile", value=True)
-
     if uploaded is None:
-        st.info("Upload a CSV or Excel file above to begin.")
+        st.info("Upload a CSV or Excel file in the sidebar (on the left) to begin.")
         return
 
     data = uploaded.getvalue()
@@ -374,8 +375,8 @@ def main() -> None:
         # before the first run so the two messages don't contradict each other.
         if not run_clicked:
             st.info(
-                "Click **Run Agent** above to start the pipeline. The data profile "
-                "is already available — no API call has been made yet."
+                "Click **Run Agent** in the sidebar to start the pipeline. The data "
+                "profile is already available — no API call has been made yet."
             )
         return
 
