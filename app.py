@@ -25,6 +25,21 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Pin the sidebar in place so it stays visible while the main content scrolls.
+st.markdown(
+    """
+    <style>
+    section[data-testid="stSidebar"] {
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        overflow-y: auto;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 # --------------------------------------------------------------------------- #
 # Small pure helpers
@@ -296,7 +311,9 @@ def _run_agent_pipeline(
 def main() -> None:
     # --- Sidebar: inputs & controls ---
     with st.sidebar:
-        st.header("Controls")
+        st.markdown("## Data Viz Agent")
+        st.caption("Upload data and let the AI choose — and critique — the best charts.")
+        st.divider()
         uploaded = st.file_uploader("Upload CSV or Excel", type=["csv", "xlsx", "xls"])
         run_clicked = st.button(
             "Run Agent",
@@ -305,6 +322,8 @@ def main() -> None:
             use_container_width=True,
         )
         show_profile = st.toggle("Show data profile", value=True)
+        st.divider()
+        st.caption("Powered by Gemini · Plotly · Streamlit")
 
     st.title("Agentic Data Visualization Recommender")
     st.caption("Upload a dataset and let an AI agent decide how to visualize it — then critique its own choices.")
