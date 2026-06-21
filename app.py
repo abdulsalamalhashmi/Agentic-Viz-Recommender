@@ -31,10 +31,11 @@ st.markdown(
     """
     <style>
     section[data-testid="stSidebar"] {
-        position: sticky;
-        top: 0;
-        height: 100vh;
-        overflow-y: auto;
+        position: sticky !important;
+        top: 0 !important;
+        align-self: flex-start !important;
+        height: 100vh !important;
+        overflow-y: auto !important;
         border-right: 1px solid rgba(255, 255, 255, 0.07);
     }
     section[data-testid="stSidebar"] hr {
@@ -333,8 +334,6 @@ def main() -> None:
             use_container_width=True,
         )
         show_profile = st.toggle("Show data profile", value=True)
-        st.divider()
-        st.caption("Powered by Gemini · Plotly · Streamlit")
 
     st.title("Agentic Data Visualization Recommender")
     st.caption("Upload a dataset and let an AI agent decide how to visualize it — then critique its own choices.")
