@@ -294,14 +294,29 @@ def _run_agent_pipeline(
 # --------------------------------------------------------------------------- #
 def main() -> None:
     st.title("Agentic Data Visualization Recommender")
-    st.caption("Upload a dataset and let the AI decide how to visualize it.")
+    st.caption("Upload a dataset and let an AI agent decide how to visualize it — then critique its own choices.")
+
+    with st.expander("How it works"):
+        st.markdown(
+            "1. **Profile** — your file is analyzed locally: column types, stats, correlations. "
+            "*(No AI yet — nothing leaves your machine at this step.)*\n"
+            "2. **Decide** — an LLM agent picks the charts that best fit the data.\n"
+            "3. **Render** — each chart is drawn with Plotly.\n"
+            "4. **Critique** — a second LLM call scores every chart 1–5 with feedback.\n"
+            "5. **Re-run** — if any chart scores below 3, the agent revises once using that feedback."
+        )
 
     uploaded = st.file_uploader("Upload CSV or Excel", type=["csv", "xlsx", "xls"])
-    col_left, col_right = st.columns([1, 1])
-    with col_left:
+    run_col, toggle_col, _spacer = st.columns([1, 1, 2])
+    with run_col:
+        run_clicked = st.button(
+            "Run Agent",
+            type="primary",
+            disabled=uploaded is None,
+            use_container_width=True,
+        )
+    with toggle_col:
         show_profile = st.toggle("Show data profile", value=True)
-    with col_right:
-        run_clicked = st.button("Run Agent", type="primary", disabled=uploaded is None)
 
     if uploaded is None:
         st.info("Upload a CSV or Excel file above to begin.")
@@ -374,8 +389,11 @@ def main() -> None:
     # --- #5 Reasoning log ---
     _render_reasoning_log(results)
 
+    st.divider()
+
     # --- #3 One unified card per chart (final set) ---
     st.subheader("Recommended visualizations")
+    st.caption("Each card shows the chart, why the agent chose it, and the critic's score.")
     _render_cards(final_plots, final_evals, key_prefix="final")
 
     # Attempt 1 kept for transparency when a re-run happened.
@@ -386,6 +404,7 @@ def main() -> None:
             _render_cards(results["plots"], results["evaluations"], key_prefix="v1")
 
     # --- #6 Data story (on-demand, one extra LLM call) ---
+    st.divider()
     story = story_cache.get(file_hash)
     with st.container(border=True):
         st.markdown("#### Data story")

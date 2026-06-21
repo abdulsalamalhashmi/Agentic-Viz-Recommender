@@ -1,0 +1,9 @@
+# App theme — polished dark look with a blue accent.
+# (Switch base to "light" or remove it to follow the visitor's system theme.)
+[theme]
+base = "dark"
+primaryColor = "#3B82F6"
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#1B2130"
+textColor = "#E6EAF2"
+font = "sans serif"
