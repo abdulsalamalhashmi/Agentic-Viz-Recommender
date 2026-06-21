@@ -41,14 +41,18 @@ def _read_uploaded(name: str, data: bytes) -> pd.DataFrame:
 
 
 def _score_label(score: int) -> str:
-    """The critic score as colored bold text (green = good, orange = ok, red = weak)."""
+    """Critic score as a colored status dot + number, e.g. ':green[**● 5/5**]'.
+
+    Uses a plain Unicode circle (●) rather than a Material icon, so it renders on
+    any Streamlit version — the pinned 1.36 doesn't support ':material/...:'.
+    """
     if score >= 4:
         color = "green"
     elif score == 3:
         color = "orange"
     else:
         color = "red"
-    return f":{color}[**Score: {score}/5**]"
+    return f":{color}[**● {score}/5**]"
 
 
 def _safe_filename(title: str) -> str:
@@ -134,8 +138,7 @@ def _render_reasoning_log(results: dict[str, Any]) -> None:
         return
     with st.container(border=True):
         st.markdown("#### Agent reasoning log")
-        for i, step in enumerate(log, start=1):
-            st.markdown(f"**{i}.** {step}")
+        st.markdown("\n".join(f"- {step}" for step in log))
 
 
 def _render_cards(
