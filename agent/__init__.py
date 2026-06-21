@@ -3,6 +3,7 @@ from .decision_agent import decide_visualizations, DecisionAgentError
 from .plot_generator import generate_plots
 from .evaluator import evaluate_visualizations, EvaluatorError
 from .storyteller import generate_data_story, StorytellerError
+from .tools import build_data_tools
 
 __all__ = [
     "profile_dataset",
@@ -13,4 +14,5 @@ __all__ = [
     "EvaluatorError",
     "generate_data_story",
     "StorytellerError",
+    "build_data_tools",
 ]

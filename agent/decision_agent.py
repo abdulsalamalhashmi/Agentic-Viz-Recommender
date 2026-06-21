@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from utils.helpers import generate_text, strip_json_fences, summarize_profile
+from agent.tools import build_data_tools
+from utils.helpers import generate_text, generate_with_tools, strip_json_fences, summarize_profile
 
 VALID_CHART_TYPES = {
     "scatter", "bar", "grouped_bar", "histogram", "heatmap",
@@ -83,6 +84,17 @@ def _build_retry_prompt(profile: dict, feedback: str | None) -> str:
     )
 
 
+def _build_tool_prompt(profile: dict, feedback: str | None) -> str:
+    return (
+        _build_prompt(profile, feedback)
+        + "\n\nBefore finalizing, you MAY call the available data-inspection tools "
+        "(describe_column, correlation, top_values, group_means) to verify your "
+        "reasoning — e.g. confirm a correlation before choosing a scatter plot, or "
+        "compare group means before a box plot. After any tool calls, respond with "
+        "ONLY the JSON array described above."
+    )
+
+
 def _parse_specs(raw_text: str) -> list[dict[str, Any]]:
     cleaned = strip_json_fences(raw_text)
     parsed = json.loads(cleaned)
@@ -130,22 +142,41 @@ def _validate_specs(specs: list[dict[str, Any]], profile: dict) -> list[dict[str
     return valid
 
 
-def decide_visualizations(profile: dict, feedback: str | None = None) -> list[dict[str, Any]]:
-    """Ask Gemini for a list of visualization specs. Retries once on parse failure."""
-    prompt = _build_prompt(profile, feedback)
-    last_error: Exception | None = None
+def decide_visualizations(
+    profile: dict, df=None, feedback: str | None = None
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Ask Gemini for visualization specs and return (specs, tool_call_log).
 
-    for attempt_prompt in (prompt, _build_retry_prompt(profile, feedback)):
+    If `df` is provided, the agent may first call real data-inspection tools
+    (function calling) to interrogate the data before deciding — genuine tool use.
+    Falls back to the tool-free prompt (with a single retry) if tool calling fails.
+    """
+    tool_calls: list[str] = []
+
+    # Primary path: let the agent inspect the data with tools, then decide.
+    if df is not None:
+        try:
+            raw_text, tool_calls = generate_with_tools(
+                _build_tool_prompt(profile, feedback), build_data_tools(df)
+            )
+            if raw_text.strip():
+                valid = _validate_specs(_parse_specs(raw_text), profile)
+                if valid:
+                    return valid, tool_calls
+        except Exception:  # noqa: BLE001 - fall back to the tool-free path
+            tool_calls = []
+
+    # Fallback path: tool-free prompt with one stricter retry (original behavior).
+    last_error: Exception | None = None
+    for attempt_prompt in (_build_prompt(profile, feedback), _build_retry_prompt(profile, feedback)):
         try:
             raw_text = generate_text(attempt_prompt)
             if not raw_text.strip():
                 raise ValueError("Gemini returned an empty response")
-
-            specs = _parse_specs(raw_text)
-            valid = _validate_specs(specs, profile)
+            valid = _validate_specs(_parse_specs(raw_text), profile)
             if not valid:
                 raise ValueError("No valid visualization specs after validation")
-            return valid
+            return valid, tool_calls
         except Exception as exc:  # noqa: BLE001 - we want a single retry path
             last_error = exc
             continue

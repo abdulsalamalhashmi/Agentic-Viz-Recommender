@@ -218,9 +218,9 @@ def _run_agent_pipeline(
             f"({_type_summary(profile)}). No API call used here."
         )
 
-        status.write("Agent is choosing visualizations...")
+        status.write("Agent is inspecting the data and choosing visualizations...")
         try:
-            viz_specs = decide_visualizations(profile)
+            viz_specs, tool_calls = decide_visualizations(profile, df=df)
         except DecisionAgentError as exc:
             status.update(label="Decision agent failed", state="error")
             st.error(friendly_error(exc))
@@ -229,6 +229,11 @@ def _run_agent_pipeline(
             status.update(label="Decision agent error", state="error")
             st.error(friendly_error(exc))
             return None
+        if tool_calls:
+            log.append(
+                f"Used {len(tool_calls)} data tool(s) to inspect the dataset: "
+                + "; ".join(tool_calls) + "."
+            )
         log.append(f"Agent chose {len(viz_specs)} visualization(s).")
 
         status.write("Rendering plots...")
@@ -260,7 +265,7 @@ def _run_agent_pipeline(
             feedback = _format_feedback(low_scoring)
             status.write("Some charts scored low — re-running with critic feedback...")
             try:
-                viz_specs_v2 = decide_visualizations(profile, feedback=feedback)
+                viz_specs_v2, tool_calls_v2 = decide_visualizations(profile, df=df, feedback=feedback)
                 plots_v2 = generate_plots(df, viz_specs_v2)
                 evaluations_v2 = evaluate_visualizations(profile, viz_specs_v2)
                 rerun_info = {
@@ -269,6 +274,8 @@ def _run_agent_pipeline(
                     "evaluations": evaluations_v2,
                     "feedback": feedback,
                 }
+                if tool_calls_v2:
+                    log.append(f"Re-inspected the data with {len(tool_calls_v2)} tool call(s) before revising.")
                 if evaluations_v2:
                     avg2 = sum(e["score"] for e in evaluations_v2) / len(evaluations_v2)
                     trend = "improved" if avg2 > avg else ("lower" if avg2 < avg else "about the same")
@@ -342,7 +349,8 @@ def main() -> None:
         st.markdown(
             "1. **Profile** — your file is analyzed locally: column types, stats, correlations. "
             "*(No AI yet — nothing leaves your machine at this step.)*\n"
-            "2. **Decide** — an LLM agent picks the charts that best fit the data.\n"
+            "2. **Decide** — an LLM agent inspects the data with tools (correlations, "
+            "group stats, value counts) and picks the charts that best fit.\n"
             "3. **Render** — each chart is drawn with Plotly.\n"
             "4. **Critique** — a second LLM call scores every chart 1–5 with feedback.\n"
             "5. **Re-run** — if any chart scores below 3, the agent revises once using that feedback."

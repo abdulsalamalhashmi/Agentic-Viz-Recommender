@@ -10,6 +10,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 from google import genai
+from google.genai import types
 
 DEFAULT_MODEL = "gemini-2.5-flash"
 
@@ -101,6 +102,53 @@ def generate_text(prompt: str, model_name: str = DEFAULT_MODEL) -> str:
     if last_exc:
         raise last_exc
     return ""
+
+
+def _extract_tool_calls(response) -> list[str]:
+    """Human-readable list of the tool calls the model made (for the UI log)."""
+    calls: list[str] = []
+    history = getattr(response, "automatic_function_calling_history", None) or []
+    for content in history:
+        for part in getattr(content, "parts", None) or []:
+            fc = getattr(part, "function_call", None)
+            if fc and getattr(fc, "name", None):
+                args = dict(fc.args) if getattr(fc, "args", None) else {}
+                arg_str = ", ".join(f"{k}={v!r}" for k, v in args.items())
+                calls.append(f"{fc.name}({arg_str})")
+    return calls
+
+
+def generate_with_tools(
+    prompt: str, tools: list, model_name: str = DEFAULT_MODEL
+) -> tuple[str, list[str]]:
+    """Generate with automatic function calling: the model may call `tools`.
+
+    Returns (final_text, [human-readable tool-call descriptions]). Falls back
+    across models on transient/rate-limit errors, like generate_text.
+    """
+    global _client
+    models_to_try = [model_name, *(m for m in _FALLBACK_MODELS if m != model_name)]
+    config = types.GenerateContentConfig(
+        tools=tools,
+        automatic_function_calling=types.AutomaticFunctionCallingConfig(maximum_remote_calls=6),
+    )
+
+    last_exc: Exception | None = None
+    for model in models_to_try:
+        try:
+            client = get_gemini_client()
+            response = client.models.generate_content(model=model, contents=prompt, config=config)
+            return (getattr(response, "text", "") or "", _extract_tool_calls(response))
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            _client = None  # drop the cached client so a transient failure can recover
+            if _is_retryable(exc):
+                continue
+            raise
+
+    if last_exc:
+        raise last_exc
+    return ("", [])
 
 
 def strip_json_fences(text: str) -> str:
