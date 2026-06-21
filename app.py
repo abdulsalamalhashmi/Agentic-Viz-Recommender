@@ -25,7 +25,8 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Pin the sidebar in place so it stays visible while the main content scrolls.
+# Pin the sidebar in place (stays visible while the main content scrolls) and
+# give it a clean separating edge + subtle dividers.
 st.markdown(
     """
     <style>
@@ -34,6 +35,11 @@ st.markdown(
         top: 0;
         height: 100vh;
         overflow-y: auto;
+        border-right: 1px solid rgba(255, 255, 255, 0.07);
+    }
+    section[data-testid="stSidebar"] hr {
+        margin: 0.9rem 0;
+        border-color: rgba(255, 255, 255, 0.08);
     }
     </style>
     """,
@@ -311,8 +317,13 @@ def _run_agent_pipeline(
 def main() -> None:
     # --- Sidebar: inputs & controls ---
     with st.sidebar:
-        st.markdown("## Data Viz Agent")
-        st.caption("Upload data and let the AI choose — and critique — the best charts.")
+        st.markdown(
+            "<div style='font-size:1.45rem;font-weight:700;line-height:1.15'>"
+            "Data&nbsp;Viz <span style='color:#3B82F6'>Agent</span></div>"
+            "<div style='color:#9aa4b2;font-size:0.85rem;margin-top:4px'>"
+            "AI chooses &amp; critiques the best charts for your data.</div>",
+            unsafe_allow_html=True,
+        )
         st.divider()
         uploaded = st.file_uploader("Upload CSV or Excel", type=["csv", "xlsx", "xls"])
         run_clicked = st.button(
