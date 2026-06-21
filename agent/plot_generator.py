@@ -62,13 +62,14 @@ def _histogram(df: pd.DataFrame, spec: dict[str, Any]):
     return px.histogram(df, x=col, color=color, title=spec.get("title"))
 
 
-def _heatmap(df: pd.DataFrame, spec: dict[str, Any]):
+def _heatmap(df: pd.DataFrame, spec: dict[str, Any], max_cols: int = 15):
     requested = spec.get("columns") or []
     numeric_cols = [c for c in requested if pd.api.types.is_numeric_dtype(df[c])]
     if len(numeric_cols) < 2:
         numeric_cols = df.select_dtypes(include="number").columns.tolist()
     if len(numeric_cols) < 2:
         raise ValueError("heatmap requires at least two numeric columns")
+    numeric_cols = numeric_cols[:max_cols]  # keep the matrix readable on wide datasets
     corr = df[numeric_cols].corr(numeric_only=True)
     return px.imshow(
         corr,
